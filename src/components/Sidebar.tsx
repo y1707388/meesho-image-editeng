@@ -12,14 +12,21 @@ import {
     Select,
     MenuItem,
     FormControl,
-    InputLabel
+    InputLabel,
+    IconButton
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+    onClose?: () => void;
+    showCloseButton?: boolean;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ onClose, showCloseButton = false }) => {
     const { config, setConfig, addFiles } = useStore();
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, category: string) => {
@@ -42,8 +49,29 @@ const Sidebar: React.FC = () => {
     };
 
     return (
-        <Box sx={{ width: 320, height: '100%', borderRight: 1, borderColor: 'divider', overflowY: 'auto', p: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>Toolbox</Typography>
+        <Box sx={{ width: { xs: '100%', sm: 320 }, maxWidth: 320, height: '100%', borderRight: 1, borderColor: 'divider', overflowY: 'auto', p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Toolbox</Typography>
+                {showCloseButton && (
+                    <IconButton
+                        aria-label="Close toolbox"
+                        onClick={onClose}
+                        size="small"
+                        sx={{
+                            color: 'primary.main',
+                            border: '1px solid',
+                            borderColor: 'primary.main',
+                            width: 30,
+                            height: 30,
+                            '&:hover': {
+                                bgcolor: 'rgba(63, 169, 245, 0.12)'
+                            }
+                        }}
+                    >
+                        <X size={18} />
+                    </IconButton>
+                )}
+            </Box>
             
             {/* Background Module */}
             <Accordion defaultExpanded>
@@ -153,6 +181,21 @@ const Sidebar: React.FC = () => {
                         Upload Logo
                         <input type="file" hidden onChange={(e) => handleFileUpload(e, 'logos')} />
                     </Button>
+                    <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                        <InputLabel>Logo Position</InputLabel>
+                        <Select
+                            value={config.logo_position}
+                            label="Logo Position"
+                            onChange={(e) => setConfig({ logo_position: e.target.value })}
+                        >
+                            <MenuItem value="Top Left">Top Left</MenuItem>
+                            <MenuItem value="Top Center">Top Center</MenuItem>
+                            <MenuItem value="Top Right">Top Right</MenuItem>
+                            <MenuItem value="Bottom Left">Bottom Left</MenuItem>
+                            <MenuItem value="Bottom Center">Bottom Center</MenuItem>
+                            <MenuItem value="Bottom Right">Bottom Right</MenuItem>
+                        </Select>
+                    </FormControl>
                     <FormControlLabel
                         control={<Checkbox checked={config.enable_gradient_border} onChange={(e) => setConfig({ enable_gradient_border: e.target.checked })} />}
                         label="Add Gradient Border"

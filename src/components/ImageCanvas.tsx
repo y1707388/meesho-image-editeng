@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Transformer, Group } from 'react-konva';
 import useImage from 'use-image';
 import { useStore } from '../store/useStore';
+import { useMediaQuery, useTheme } from '@mui/material';
 
-const CANVAS_PADDING = 64;
+const CANVAS_PADDING = 32; // Reduced from 64 for better mobile fit
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.2;
@@ -18,11 +19,34 @@ const ImageCanvas: React.FC = () => {
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
     const [userZoom, setUserZoom] = useState(1);
     
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+    const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+    
     const viewportRef = useRef<HTMLDivElement>(null);
     const stageRef = useRef<any>(null);
     const rectRef = useRef<any>(null);
     const trRef = useRef<any>(null);
     const previousZoomRef = useRef(userZoom);
+
+    const checkerPattern = useMemo(() => {
+        const pattern = document.createElement('canvas');
+        const size = 16;
+        const half = size / 2;
+        pattern.width = size;
+        pattern.height = size;
+
+        const ctx = pattern.getContext('2d');
+        if (!ctx) return pattern;
+
+        ctx.fillStyle = '#151515';
+        ctx.fillRect(0, 0, size, size);
+        ctx.fillStyle = '#242424';
+        ctx.fillRect(0, 0, half, half);
+        ctx.fillRect(half, half, half, half);
+
+        return pattern;
+    }, []);
 
     useEffect(() => {
         setUserZoom(1);
@@ -46,20 +70,21 @@ const ImageCanvas: React.FC = () => {
         return () => observer.disconnect();
     }, []);
 
+    const padding = isMobile ? 8 : CANVAS_PADDING;
     const fitScale = image && stageSize.width > 0 && stageSize.height > 0
         ? Math.max(
             0.05,
             Math.min(
-                (stageSize.width - CANVAS_PADDING * 2) / image.width,
-                (stageSize.height - CANVAS_PADDING * 2) / image.height
+                (stageSize.width - padding * 2) / image.width,
+                (stageSize.height - padding * 2) / image.height
             )
         )
         : 1;
     const imageScale = fitScale * userZoom;
     const scaledImageWidth = image ? image.width * imageScale : 0;
     const scaledImageHeight = image ? image.height * imageScale : 0;
-    const canvasWidth = Math.max(stageSize.width, scaledImageWidth + CANVAS_PADDING * 2);
-    const canvasHeight = Math.max(stageSize.height, scaledImageHeight + CANVAS_PADDING * 2);
+    const canvasWidth = Math.max(stageSize.width, scaledImageWidth + padding * 2);
+    const canvasHeight = Math.max(stageSize.height, scaledImageHeight + padding * 2);
 
     const imageX = image ? (canvasWidth - scaledImageWidth) / 2 : 0;
     const imageY = image ? (canvasHeight - scaledImageHeight) / 2 : 0;
@@ -101,7 +126,9 @@ const ImageCanvas: React.FC = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     backgroundColor: '#0a0a0a',
-                    color: '#777'
+                    color: '#777',
+                    padding: '16px',
+                    textAlign: 'center'
                 }}
             >
                 Select an image from the top bar to start
@@ -119,22 +146,42 @@ const ImageCanvas: React.FC = () => {
     const zoomOut = () => setUserZoom((zoom) => clamp(zoom - ZOOM_STEP, MIN_ZOOM, MAX_ZOOM));
     const resetZoom = () => setUserZoom(1);
 
-    const handleStageMouseDown = (e: any) => {
-        const clickedOnImage = e.target.className === 'Image';
+    const createSelectionAtPointer = () => {
+        const pos = stageRef.current?.getPointerPosition();
+        if (!pos) return;
 
-        if (clickedOnImage) {
-            const pos = stageRef.current.getPointerPosition();
-            const localPos = {
-                x: (pos.x - imageX) / imageScale,
-                y: (pos.y - imageY) / imageScale,
-            };
-            
-            const smallestSide = Math.min(image.width, image.height);
-            const size = clamp(smallestSide * 0.08, 24, smallestSide * 0.18);
-            const x = Math.max(0, Math.min(localPos.x, image.width - size));
-            const y = Math.max(0, Math.min(localPos.y, image.height - size));
-            
-            setConfig({ selection_area: [x, y, x + size, y + size] });
+        const localPos = {
+            x: (pos.x - imageX) / imageScale,
+            y: (pos.y - imageY) / imageScale,
+        };
+
+        const isInsideImage =
+            localPos.x >= 0 &&
+            localPos.y >= 0 &&
+            localPos.x <= image.width &&
+            localPos.y <= image.height;
+
+        if (!isInsideImage) return;
+
+        const smallestSide = Math.min(image.width, image.height);
+        const size = clamp(smallestSide * 0.08, 24, smallestSide * 0.18);
+        const x = Math.max(0, Math.min(localPos.x, image.width - size));
+        const y = Math.max(0, Math.min(localPos.y, image.height - size));
+
+        setConfig({ selection_area: [x, y, x + size, y + size] });
+    };
+
+    const handleStagePointerDown = (e: any) => {
+        const target = e.target;
+        const transformer = trRef.current;
+        const clickedOnSelector =
+            target === rectRef.current ||
+            target === transformer ||
+            target.getParent?.() === transformer ||
+            Boolean(target.findAncestor?.('Transformer'));
+
+        if (!clickedOnSelector) {
+            createSelectionAtPointer();
         }
     };
 
@@ -150,14 +197,21 @@ const ImageCanvas: React.FC = () => {
         let y = node.y();
         let w = node.width() * scaleX;
         let h = node.height() * scaleY;
+        const minSize = Math.max(2, Math.min(image.width, image.height) * 0.01);
 
         if (x < 0) { w += x; x = 0; }
         if (y < 0) { h += y; y = 0; }
         if (x + w > image.width) w = image.width - x;
         if (y + h > image.height) h = image.height - y;
+        x = clamp(x, 0, image.width - minSize);
+        y = clamp(y, 0, image.height - minSize);
+        w = clamp(w, minSize, image.width - x);
+        h = clamp(h, minSize, image.height - y);
 
         setConfig({ selection_area: [x, y, x + w, y + h] });
     };
+
+    const frameGap = isMobile ? 8 : 32;
 
     return (
         <div 
@@ -172,10 +226,10 @@ const ImageCanvas: React.FC = () => {
             {/* Workspace Frame - Strictly fixed */}
             <div style={{
                 position: 'absolute',
-                top: 32,
-                left: 32,
-                right: 32,
-                bottom: 32,
+                top: frameGap,
+                left: frameGap,
+                right: frameGap,
+                bottom: frameGap,
                 border: '1px solid rgba(255,255,255,0.05)',
                 pointerEvents: 'none',
                 borderRadius: '8px',
@@ -197,7 +251,8 @@ const ImageCanvas: React.FC = () => {
                     width={canvasWidth}
                     height={canvasHeight}
                     onWheel={handleWheel}
-                    onMouseDown={handleStageMouseDown}
+                    onMouseDown={handleStagePointerDown}
+                    onTap={handleStagePointerDown}
                 >
                     <Layer>
                         <Group x={imageX} y={imageY} scaleX={imageScale} scaleY={imageScale}>
@@ -210,10 +265,34 @@ const ImageCanvas: React.FC = () => {
                                 shadowBlur={20 / imageScale}
                             />
 
+                            <Rect
+                                x={0}
+                                y={0}
+                                width={image.width}
+                                height={image.height}
+                                fillPatternImage={checkerPattern as any}
+                                fillPatternRepeat="repeat"
+                                opacity={0.55}
+                                stroke="#3fa9f5"
+                                strokeWidth={1.5 / imageScale}
+                                listening={false}
+                            />
+
                             <KonvaImage
                                 image={image}
                                 width={image.width}
                                 height={image.height}
+                            />
+
+                            <Rect
+                                x={0}
+                                y={0}
+                                width={image.width}
+                                height={image.height}
+                                stroke="#3fa9f5"
+                                strokeWidth={1.5 / imageScale}
+                                opacity={0.8}
+                                listening={false}
                             />
 
                             {config.selection_area && (
@@ -248,12 +327,11 @@ const ImageCanvas: React.FC = () => {
                                         anchorStroke="#fff"
                                         anchorCornerRadius={2}
                                         boundBoxFunc={(oldBox, newBox) => {
-                                            const isOut = 
-                                                newBox.x < 0 || 
-                                                newBox.y < 0 || 
-                                                newBox.x + newBox.width > image.width || 
-                                                newBox.y + newBox.height > image.height;
-                                            if (isOut || newBox.width < 20 || newBox.height < 20) return oldBox;
+                                            const minImageSize = Math.max(2, Math.min(image.width, image.height) * 0.01);
+                                            const minScreenSize = Math.max(8, minImageSize * imageScale);
+                                            if (newBox.width < minScreenSize || newBox.height < minScreenSize) {
+                                                return oldBox;
+                                            }
                                             return newBox;
                                         }}
                                     />
@@ -289,39 +367,41 @@ const ImageCanvas: React.FC = () => {
                 </div>
             </div>
 
-            <div style={{
-                position: 'absolute',
-                bottom: '24px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                display: 'flex',
-                gap: '16px',
-                pointerEvents: 'none'
-            }}>
+            {!isTablet && (
                 <div style={{
-                    backgroundColor: 'rgba(0,0,0,0.6)',
-                    backdropFilter: 'blur(10px)',
-                    padding: '8px 24px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    position: 'absolute',
+                    bottom: '24px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '24px'
+                    gap: '16px',
+                    pointerEvents: 'none'
                 }}>
-                    <span style={{ color: '#aaa', fontSize: '11px', fontWeight: '500' }}>Image: Center Fit</span>
-                    <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
-                    <span style={{ color: '#aaa', fontSize: '11px', fontWeight: '500' }}>Wheel: Zoom</span>
-                    <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
-                    <span style={{ color: '#aaa', fontSize: '11px', fontWeight: '500' }}>Drag Box: Move</span>
-                    <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
-                    <span style={{ color: '#aaa', fontSize: '11px', fontWeight: '500' }}>Click: Select</span>
+                    <div style={{
+                        backgroundColor: 'rgba(0,0,0,0.6)',
+                        backdropFilter: 'blur(10px)',
+                        padding: '8px 24px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '24px'
+                    }}>
+                        <span style={{ color: '#aaa', fontSize: '11px', fontWeight: '500' }}>Image: Center Fit</span>
+                        <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+                        <span style={{ color: '#aaa', fontSize: '11px', fontWeight: '500' }}>Wheel: Zoom</span>
+                        <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+                        <span style={{ color: '#aaa', fontSize: '11px', fontWeight: '500' }}>Drag Box: Move</span>
+                        <div style={{ width: '1px', height: '12px', backgroundColor: 'rgba(255,255,255,0.1)' }} />
+                        <span style={{ color: '#aaa', fontSize: '11px', fontWeight: '500' }}>Click: Select</span>
+                    </div>
                 </div>
-            </div>
+            )}
 
             <div style={{
                 position: 'absolute',
-                right: '16px',
-                bottom: '24px',
+                right: isMobile ? '8px' : '16px',
+                bottom: isMobile ? '8px' : '24px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -329,7 +409,8 @@ const ImageCanvas: React.FC = () => {
                 backdropFilter: 'blur(10px)',
                 padding: '6px',
                 borderRadius: '10px',
-                border: '1px solid rgba(255,255,255,0.12)'
+                border: '1px solid rgba(255,255,255,0.12)',
+                zIndex: 10
             }}>
                 <button
                     type="button"

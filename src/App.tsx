@@ -1,4 +1,5 @@
-import { Box, CssBaseline, ThemeProvider, createTheme, Dialog, IconButton } from '@mui/material';
+import { useState } from 'react';
+import { Box, CssBaseline, ThemeProvider, createTheme, Dialog, IconButton, Drawer, useMediaQuery, useTheme } from '@mui/material';
 import { X } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
@@ -21,14 +22,33 @@ const darkTheme = createTheme({
 
 function App() {
   const { previewUrl, setPreviewUrl } = useStore();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <Box sx={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', bgcolor: 'background.default' }}>
-        <Sidebar />
+        {isMobile ? (
+          <Drawer
+            open={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            variant="temporary"
+            slotProps={{
+              paper: {
+                sx: { bgcolor: 'background.paper', backgroundImage: 'none' }
+              }
+            }}
+          >
+            <Sidebar onClose={() => setSidebarOpen(false)} showCloseButton />
+          </Drawer>
+        ) : (
+          <Sidebar />
+        )}
+        
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <TopBar />
+          <TopBar onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} showMenuButton={isMobile} />
           <Box sx={{ flex: 1, position: 'relative', width: '100%', minHeight: 0, bgcolor: '#1a1a1a' }}>
             <ImageCanvas />
           </Box>

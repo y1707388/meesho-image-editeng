@@ -15,6 +15,7 @@ interface AppState {
     setConfig: (config: Partial<ProcessingConfig>) => void;
     addFiles: (files: UploadedFile[], category: string) => void;
     setCurrentIdx: (idx: number) => void;
+    removeCurrentImage: () => void;
     setIsProcessing: (status: boolean) => void;
     setPreviewUrl: (url: string | null) => void;
     updateImageSelection: (area: [number, number, number, number] | null) => void;
@@ -60,6 +61,28 @@ export const useStore = create<AppState>((set) => ({
     }),
 
     setCurrentIdx: (idx) => set({ currentIdx: idx }),
+
+    removeCurrentImage: () => set((state) => {
+        if (state.currentIdx < 0 || state.inputImages.length === 0) {
+            return {};
+        }
+
+        const removedImage = state.inputImages[state.currentIdx];
+        if (removedImage?.url?.startsWith('blob:')) {
+            URL.revokeObjectURL(removedImage.url);
+        }
+
+        const inputImages = state.inputImages.filter((_, index) => index !== state.currentIdx);
+        const currentIdx = inputImages.length === 0
+            ? -1
+            : Math.min(state.currentIdx, inputImages.length - 1);
+
+        return {
+            inputImages,
+            currentIdx,
+            config: { ...state.config, selection_area: null }
+        };
+    }),
     
     setIsProcessing: (status) => set({ isProcessing: status }),
     

@@ -1,4 +1,4 @@
-import { Box, Button, LinearProgress, Typography } from '@mui/material';
+import { Box, Button, LinearProgress, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { useStore } from '../store/useStore';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
@@ -15,6 +15,9 @@ const BottomBar: React.FC = () => {
         setIsProcessing,
         setPreviewUrl 
     } = useStore();
+
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
     const handlePreview = async () => {
         if (currentIdx === -1) return;
@@ -58,33 +61,54 @@ const BottomBar: React.FC = () => {
     };
 
     return (
-        <Box sx={{ height: 80, borderTop: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', px: 3, gap: 2 }}>
-            <Box sx={{ flex: 1 }}>
-                {isProcessing && <LinearProgress />}
+        <Box sx={{ 
+            minHeight: { xs: 'auto', sm: 80 }, 
+            py: { xs: 1.5, sm: 0 },
+            px: { xs: 2, sm: 3 },
+            borderTop: 1, 
+            borderColor: 'divider', 
+            display: 'flex', 
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: 'center', 
+            gap: 1.5
+        }}>
+            <Box sx={{ width: '100%', flex: { sm: 1 }, textAlign: { xs: 'center', sm: 'left' } }}>
+                {isProcessing && <LinearProgress sx={{ mb: 0.5 }} />}
                 <Typography variant="caption" color="textSecondary">
                     {isProcessing ? "Processing..." : "Ready"}
                 </Typography>
             </Box>
             
-            <Button 
-                variant="contained" 
-                color="success" 
-                size="large"
-                disabled={isProcessing || currentIdx === -1}
-                onClick={handlePreview}
-            >
-                LIVE PREVIEW
-            </Button>
-            
-            <Button 
-                variant="contained" 
-                color="primary" 
-                size="large"
-                disabled={isProcessing || inputImages.length === 0}
-                onClick={handleStartProcessing}
-            >
-                START GENERATING
-            </Button>
+            <Box sx={{ 
+                display: 'flex', 
+                width: { xs: '100%', sm: 'auto' }, 
+                gap: 1.5,
+                justifyContent: 'center'
+            }}>
+                <Button 
+                    variant="contained" 
+                    color="success" 
+                    size={isMobile ? "medium" : "large"}
+                    fullWidth={isMobile}
+                    disabled={isProcessing || currentIdx === -1}
+                    onClick={handlePreview}
+                    sx={{ whiteSpace: 'nowrap' }}
+                >
+                    {isMobile ? "PREVIEW" : "LIVE PREVIEW"}
+                </Button>
+                
+                <Button 
+                    variant="contained" 
+                    color="primary" 
+                    size={isMobile ? "medium" : "large"}
+                    fullWidth={isMobile}
+                    disabled={isProcessing || inputImages.length === 0}
+                    onClick={handleStartProcessing}
+                    sx={{ whiteSpace: 'nowrap' }}
+                >
+                    {isMobile ? "GENERATE" : "START GENERATING"}
+                </Button>
+            </Box>
         </Box>
     );
 };
